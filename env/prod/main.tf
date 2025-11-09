@@ -2,6 +2,14 @@ provider "aws" {
   region = var.aws_region
 }
 
+terraform {
+  required_providers {
+    helm = {
+      source  = "hashicorp/helm"
+      version = ">= 2.12.0"
+    }
+  }
+}
 module "vpc" {
   source             = "../../modules/vpc"
   aws_region         = var.aws_region
@@ -10,6 +18,7 @@ module "vpc" {
   public_subnets     = var.public_subnets
   private_subnets    = var.private_subnets
 }
+
 
 module "eks" {
   source            = "../../modules/eks"
