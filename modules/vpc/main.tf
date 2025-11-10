@@ -8,6 +8,9 @@ resource "aws_vpc" "main" {
   }
 }
 
+# -----------------------------
+# Public Subnets (for ALB)
+# -----------------------------
 resource "aws_subnet" "public" {
   count                   = length(var.public_subnets)
   vpc_id                  = aws_vpc.main.id
@@ -16,10 +19,15 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "public-subnet-${count.index + 1}"
+    Name                             = "public-subnet-${count.index + 1}"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    "kubernetes.io/role/elb"         = "1"
   }
 }
 
+# -----------------------------
+# Private Subnets (optional internal ALB)
+# -----------------------------
 resource "aws_subnet" "private" {
   count                   = length(var.private_subnets)
   vpc_id                  = aws_vpc.main.id
@@ -28,10 +36,16 @@ resource "aws_subnet" "private" {
   map_public_ip_on_launch = false
 
   tags = {
-    Name = "private-subnet-${count.index + 1}"
+    Name                             = "private-subnet-${count.index + 1}"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    # Uncomment below if you want internal ALBs
+    # "kubernetes.io/role/internal-elb" = "1"
   }
 }
 
+# -----------------------------
+# Internet Gateway
+# -----------------------------
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
   tags = {
@@ -39,6 +53,9 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
+# -----------------------------
+# NAT Gateway
+# -----------------------------
 resource "aws_eip" "nat_eip" {
   domain = "vpc"
 }
@@ -53,6 +70,9 @@ resource "aws_nat_gateway" "nat" {
   }
 }
 
+# -----------------------------
+# Route Tables
+# -----------------------------
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.main.id
 

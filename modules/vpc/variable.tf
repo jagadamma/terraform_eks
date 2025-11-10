@@ -8,6 +8,11 @@ variable "vpc_cidr" {
   description = "CIDR block for the VPC"
 }
 
+variable "cluster_name" {
+  description = "EKS cluster name (for tagging subnets for ALB)"
+  type        = string
+}
+
 variable "availability_zones" {
   type        = list(string)
   description = "List of availability zones"

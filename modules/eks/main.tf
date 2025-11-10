@@ -250,7 +250,7 @@ resource "helm_release" "aws_load_balancer_controller" {
     },
     {
       name  = "vpcId"
-      value = "vpc-0a2e9baee8472b852"
+      value = aws_eks_cluster.main.vpc_config[0].vpc_id
     },
     {
       name  = "region"
