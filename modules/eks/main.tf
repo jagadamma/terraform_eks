@@ -159,6 +159,9 @@ resource "helm_release" "metrics_server" {
   namespace  = "kube-system"
   version    = "3.12.1"
 
+  wait = true
+  timeout = 300
+
   set = [
     {
       name  = "args"
