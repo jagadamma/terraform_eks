@@ -29,3 +29,10 @@ variable "aws_region" {
 variable "eks_version" {        # missing in your old version
   type = string
 }
+
+variable "ebs_csi_version" {
+  description = "Version of the EBS CSI driver addon"
+  type        = string
+}
+
+

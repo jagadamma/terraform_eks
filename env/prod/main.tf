@@ -32,6 +32,8 @@ module "eks" {
   instance_type     = var.instance_type
   private_subnet_ids = module.vpc.private_subnet_ids
   aws_region         = var.aws_region
+  ebs_csi_version = var.ebs_csi_version
+
 }
 
 module "s3" {

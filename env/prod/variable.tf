@@ -67,3 +67,8 @@ variable "eks_version" {
   description = "EKS Kubernetes version"
   type        = string
 }
+
+variable "ebs_csi_version" {
+  description = "Version for AWS EBS CSI Driver"
+  type        = string
+}

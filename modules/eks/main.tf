@@ -123,6 +123,8 @@ resource "aws_eks_addon" "vpc_cni" {
   addon_name   = "vpc-cni"
 }
 
+
+
 ########################################
 # HELM Configuration
 ########################################
@@ -274,4 +276,60 @@ resource "helm_release" "aws_load_balancer_controller" {
     aws_eks_cluster.main,
     kubernetes_service_account.aws_load_balancer_controller
   ]
+}
+
+########################################
+# EBS CSI DRIVER (IAM + Addon)
+########################################
+
+data "aws_iam_policy_document" "ebs_csi_assume_role_policy" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks_oidc_provider.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
+    }
+  }
+}
+resource "aws_iam_role" "ebs_csi_driver_role" {
+  name               = "${var.cluster_name}-ebs-csi-driver-role"
+  assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume_role_policy.json
+}
+resource "aws_iam_role_policy_attachment" "ebs_csi_driver_policy_attach" {
+  role       = aws_iam_role.ebs_csi_driver_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+}
+resource "kubernetes_service_account" "ebs_csi_controller_sa" {
+  metadata {
+    name      = "ebs-csi-controller-sa"
+    namespace = "kube-system"
+
+    annotations = {
+      "eks.amazonaws.com/role-arn" = aws_iam_role.ebs_csi_driver_role.arn
+    }
+  }
+
+  depends_on = [
+    aws_iam_role.ebs_csi_driver_role,
+    aws_eks_cluster.main
+  ]
+}
+resource "aws_eks_addon" "aws_ebs_csi_driver" {
+  cluster_name  = aws_eks_cluster.main.name
+  addon_name    = "aws-ebs-csi-driver"
+  addon_version = var.ebs_csi_version
+  service_account_role_arn = aws_iam_role.ebs_csi_driver_role.arn
+
+  depends_on = [
+    kubernetes_service_account.ebs_csi_controller_sa,
+    aws_iam_role_policy_attachment.ebs_csi_driver_policy_attach
+   ]
 }
