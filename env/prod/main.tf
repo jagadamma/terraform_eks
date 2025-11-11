@@ -34,6 +34,10 @@ module "eks" {
   aws_region         = var.aws_region
   ebs_csi_version = var.ebs_csi_version
 
+  providers = {
+    kubernetes = kubernetes
+    helm       = helm
+  }
 }
 
 
@@ -51,7 +55,7 @@ resource "helm_release" "kube_prometheus_stack" {
   ]
 
   depends_on = [
-    module.eks   # very important to ensure EKS is ready
+    module.eks  
   ]
 }
 

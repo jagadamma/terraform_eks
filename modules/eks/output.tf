@@ -1,0 +1,17 @@
+# modules/eks/output.tf  (new)
+output "cluster_name" {
+  value = aws_eks_cluster.main.name
+}
+
+output "cluster_endpoint" {
+  value = aws_eks_cluster.main.endpoint
+}
+
+output "cluster_ca" {
+  value = aws_eks_cluster.main.certificate_authority[0].data
+}
+
+# Useful if you want to reference OIDC/region from root
+output "region" {
+  value = var.aws_region
+}
