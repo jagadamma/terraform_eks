@@ -36,6 +36,26 @@ module "eks" {
 
 }
 
+
+resource "helm_release" "kube_prometheus_stack" {
+  name       = "kube-prometheus-stack"
+  repository = "https://prometheus-community.github.io/helm-charts"
+  chart      = "kube-prometheus-stack"
+  namespace  = "monitoring"
+  version    = "66.6.0"
+
+  create_namespace = true
+
+  values = [
+    file("${path.module}/prometheus-values.yaml")
+  ]
+
+  depends_on = [
+    module.eks   # very important to ensure EKS is ready
+  ]
+}
+
+
 module "s3" {
   source      = "../../modules/s3"
   bucket_name = var.bucket_name
