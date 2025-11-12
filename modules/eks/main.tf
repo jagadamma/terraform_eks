@@ -1,13 +1,6 @@
 ########################################
 # EKS Cluster and Node Group
 ########################################
-data "aws_eks_cluster" "cluster" {
-  name = aws_eks_cluster.main.name
-}
-
-data "aws_eks_cluster_auth" "cluster" {
-  name = aws_eks_cluster.main.name
-}
 
 # IAM Role for EKS Cluster
 resource "aws_iam_role" "eks_cluster_role" {
@@ -100,14 +93,13 @@ resource "aws_eks_node_group" "private_nodes" {
   instance_types = [var.instance_type]
   disk_size      = 20
 
-  depends_on = [
-    aws_eks_cluster.main
-  ]
+  depends_on = [aws_eks_cluster.main]
 }
 
 ########################################
-# Add-ons
+# EKS Add-ons (CoreDNS, Kube-Proxy, VPC CNI)
 ########################################
+
 resource "aws_eks_addon" "coredns" {
   cluster_name = aws_eks_cluster.main.name
   addon_name   = "coredns"
@@ -123,66 +115,9 @@ resource "aws_eks_addon" "vpc_cni" {
   addon_name   = "vpc-cni"
 }
 
-
-
 ########################################
-# HELM Configuration
+# AWS OIDC Provider (required for IRSA roles)
 ########################################
-terraform {
-  required_providers {
-    helm = {
-      source  = "hashicorp/helm"
-      version = ">= 2.12.0"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = ">= 2.20.0"
-    }
-  }
-}
-
-#provider "kubernetes" {
-#  host                   = aws_eks_cluster.main.endpoint
-#  cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
-#  token                  = data.aws_eks_cluster_auth.cluster.token
-#}
-
-#provider "helm" {
-#  kubernetes = {
-#    host                   = data.aws_eks_cluster.cluster.endpoint
-#    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
-#    token                  = data.aws_eks_cluster_auth.cluster.token
-#  }
-#}
-
-########################################
-# Metrics Server
-########################################
-resource "helm_release" "metrics_server" {
-  name       = "metrics-server"
-  repository = "https://kubernetes-sigs.github.io/metrics-server/"
-  chart      = "metrics-server"
-  namespace  = "kube-system"
-  version    = "3.12.1"
-
-  wait = true
-  timeout = 300
-
-  set = [
-    {
-      name  = "args"
-      value = "{--kubelet-insecure-tls,--kubelet-preferred-address-types=InternalIP}"
-    }
-  ]
-
-  depends_on = [aws_eks_cluster.main]
-}
-
-########################################
-# AWS Load Balancer Controller (Fixed + OIDC)
-########################################
-
-data "aws_caller_identity" "current" {}
 
 data "tls_certificate" "eks_oidc_thumbprint" {
   url = aws_eks_cluster.main.identity[0].oidc[0].issuer
@@ -192,94 +127,6 @@ resource "aws_iam_openid_connect_provider" "eks_oidc_provider" {
   url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.eks_oidc_thumbprint.certificates[0].sha1_fingerprint]
-}
-
-# IAM Trust Policy for ALB Controller
-data "aws_iam_policy_document" "alb_controller_assume_role_policy" {
-  statement {
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-    effect  = "Allow"
-
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub"
-      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
-    }
-
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.eks_oidc_provider.arn]
-    }
-  }
-}
-
-# ALB Controller Role
-resource "aws_iam_role" "alb_controller_role" {
-  name               = "${var.cluster_name}-alb-controller-role"
-  assume_role_policy = data.aws_iam_policy_document.alb_controller_assume_role_policy.json
-}
-
-# Custom ALB Controller Policy
-resource "aws_iam_policy" "alb_controller_policy" {
-  name        = "AWSLoadBalancerControllerPolicy"
-  description = "Policy for AWS Load Balancer Controller"
-  policy      = file("${path.module}/alb-controller-policy.json")
-}
-
-resource "aws_iam_role_policy_attachment" "alb_controller_policy_attach" {
-  role       = aws_iam_role.alb_controller_role.name
-  policy_arn = aws_iam_policy.alb_controller_policy.arn
-}
-
-# Service Account for ALB Controller
-resource "kubernetes_service_account" "aws_load_balancer_controller" {
-  metadata {
-    name      = "aws-load-balancer-controller"
-    namespace = "kube-system"
-    annotations = {
-      "eks.amazonaws.com/role-arn" = aws_iam_role.alb_controller_role.arn
-    }
-  }
-
-  depends_on = [aws_iam_role.alb_controller_role]
-}
-
-# Helm Release for ALB Controller
-resource "helm_release" "aws_load_balancer_controller" {
-  name       = "aws-load-balancer-controller"
-  repository = "https://aws.github.io/eks-charts"
-  chart      = "aws-load-balancer-controller"
-  namespace  = "kube-system"
-  version    = "1.8.1"
-
-  set = [
-    {
-      name  = "clusterName"
-      value = var.cluster_name
-    },
-    {
-      name  = "vpcId"
-      value = aws_eks_cluster.main.vpc_config[0].vpc_id
-    },
-    {
-      name  = "region"
-      value = var.aws_region
-    },
-    {
-      name  = "serviceAccount.create"
-      value = "false"
-    },
-    {
-      name  = "serviceAccount.name"
-      value = "aws-load-balancer-controller"
-    }
-  ]
-
-  depends_on = [
-    aws_iam_role.alb_controller_role,
-    aws_eks_cluster.main,
-    kubernetes_service_account.aws_load_balancer_controller
-  ]
 }
 
 ########################################
@@ -303,37 +150,24 @@ data "aws_iam_policy_document" "ebs_csi_assume_role_policy" {
     }
   }
 }
+
 resource "aws_iam_role" "ebs_csi_driver_role" {
   name               = "${var.cluster_name}-ebs-csi-driver-role"
   assume_role_policy = data.aws_iam_policy_document.ebs_csi_assume_role_policy.json
 }
+
 resource "aws_iam_role_policy_attachment" "ebs_csi_driver_policy_attach" {
   role       = aws_iam_role.ebs_csi_driver_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
-resource "kubernetes_service_account" "ebs_csi_controller_sa" {
-  metadata {
-    name      = "ebs-csi-controller-sa"
-    namespace = "kube-system"
 
-    annotations = {
-      "eks.amazonaws.com/role-arn" = aws_iam_role.ebs_csi_driver_role.arn
-    }
-  }
-
-  depends_on = [
-    aws_iam_role.ebs_csi_driver_role,
-    aws_eks_cluster.main
-  ]
-}
 resource "aws_eks_addon" "aws_ebs_csi_driver" {
-  cluster_name  = aws_eks_cluster.main.name
-  addon_name    = "aws-ebs-csi-driver"
-  addon_version = var.ebs_csi_version
+  cluster_name             = aws_eks_cluster.main.name
+  addon_name               = "aws-ebs-csi-driver"
+  addon_version            = var.ebs_csi_version
   service_account_role_arn = aws_iam_role.ebs_csi_driver_role.arn
 
   depends_on = [
-    kubernetes_service_account.ebs_csi_controller_sa,
     aws_iam_role_policy_attachment.ebs_csi_driver_policy_attach
-   ]
+  ]
 }
