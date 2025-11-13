@@ -15,3 +15,8 @@ output "cluster_ca_certificate" {
 output "region" {
   value = var.aws_region
 }
+
+output "alb_irsa_role_arn" {
+  value = aws_iam_role.alb_irsa_role.arn
+  description = "IRSA role ARN for AWS Load Balancer Controller"
+}

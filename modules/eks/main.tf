@@ -44,6 +44,22 @@ resource "aws_iam_role" "node_group_role" {
   })
 }
 
+########################################
+# AWS Load Balancer Controller IAM Policy
+########################################
+
+resource "aws_iam_policy" "aws_lb_controller_policy" {
+  name        = "AWSLoadBalancerControllerIAMPolicy"
+  description = "IAM Policy for AWS Load Balancer Controller"
+  policy      = file("${path.module}/alb-controller-policy.json")
+}
+
+resource "aws_iam_role_policy_attachment" "attach_alb_policy_to_nodes" {
+  role       = aws_iam_role.node_group_role.name
+  policy_arn = aws_iam_policy.aws_lb_controller_policy.arn
+}
+
+
 resource "aws_iam_role_policy_attachment" "AmazonEKSWorkerNodePolicy" {
   role       = aws_iam_role.node_group_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
@@ -128,6 +144,41 @@ resource "aws_iam_openid_connect_provider" "eks_oidc_provider" {
   client_id_list  = ["sts.amazonaws.com"]
   thumbprint_list = [data.tls_certificate.eks_oidc_thumbprint.certificates[0].sha1_fingerprint]
 }
+
+
+########################################
+# IRSA for AWS Load Balancer Controller
+########################################
+
+data "aws_iam_policy_document" "alb_irsa_assume_role_policy" {
+  statement {
+    effect = "Allow"
+
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks_oidc_provider.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      values   = ["system:serviceaccount:kube-system:aws-load-balancer-controller"]
+    }
+  }
+}
+
+resource "aws_iam_role" "alb_irsa_role" {
+  name               = "${var.cluster_name}-alb-controller-role"
+  assume_role_policy = data.aws_iam_policy_document.alb_irsa_assume_role_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "alb_irsa_policy_attach" {
+  role       = aws_iam_role.alb_irsa_role.name
+  policy_arn = aws_iam_policy.aws_lb_controller_policy.arn
+}
+
 
 ########################################
 # EBS CSI DRIVER (IAM + Addon)

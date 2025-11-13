@@ -88,7 +88,13 @@ resource "helm_release" "aws_load_balancer_controller" {
     {
       name  = "vpcId"
       value = module.vpc.vpc_id
-    }
+    },
+
+    {
+      name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+      value =  module.eks.alb_irsa_role_arn
+    },
+
   ]
 
   depends_on = [module.eks]
