@@ -78,8 +78,3 @@ output "kube_proxy_addon" {
 output "ebs_csi_addon" {
   value = try(aws_eks_addon.aws_ebs_csi_driver.addon_name, null)
 }
-
-# VPC CNI removed (installed by AWS automatically)
-output "vpc_cni_addon" {
-  value = null
-}
