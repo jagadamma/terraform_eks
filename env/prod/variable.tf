@@ -1,66 +1,35 @@
+############################################################
+# ENV / PROD VARIABLES
+############################################################
+
 variable "aws_region" {
-  description = "AWS region to deploy resources"
-  type        = string
-}
-
-variable "vpc_cidr" {
-  description = "CIDR block for the VPC"
-  type        = string
-}
-
-variable "availability_zones" {
-  description = "List of availability zones"
-  type        = list(string)
-}
-
-variable "public_subnets" {
-  description = "List of public subnet CIDR blocks"
-  type        = list(string)
-}
-
-variable "private_subnets" {
-  description = "List of private subnet CIDR blocks"
-  type        = list(string)
-}
-
-variable "bucket_name" {
-  description = "Name of the S3 bucket"
-  type        = string
-}
-
-variable "is_public" {
-  description = "Set to true to make the S3 bucket public"
-  type        = bool
-}
-
-variable "environment" {
-  description = "Environment name (e.g., dev, prod)"
+  description = "AWS region for all resources"
   type        = string
 }
 
 variable "cluster_name" {
-  description = "EKS cluster name"
+  description = "Name of the EKS cluster"
   type        = string
 }
 
-variable "desired_capacity" {
-  description = "Desired capacity for node group"
-  type        = number
-}
-
-variable "min_capacity" {
-  description = "Minimum capacity for node group"
-  type        = number
-}
-
-variable "max_capacity" {
-  description = "Maximum capacity for node group"
-  type        = number
-}
-
-variable "instance_type" {
-  description = "EC2 instance type"
+variable "vpc_cidr" {
+  description = "VPC CIDR block"
   type        = string
+}
+
+variable "availability_zones" {
+  description = "List of AZs for subnets"
+  type        = list(string)
+}
+
+variable "public_subnets" {
+  description = "List of public subnet CIDRs"
+  type        = list(string)
+}
+
+variable "private_subnets" {
+  description = "List of private subnet CIDRs"
+  type        = list(string)
 }
 
 variable "eks_version" {
@@ -68,7 +37,50 @@ variable "eks_version" {
   type        = string
 }
 
+variable "instance_type" {
+  description = "EC2 instance type for node group"
+  type        = string
+}
+
+variable "desired_capacity" {
+  description = "Desired number of worker nodes"
+  type        = number
+}
+
+variable "min_capacity" {
+  description = "Minimum number of worker nodes"
+  type        = number
+}
+
+variable "max_capacity" {
+  description = "Maximum number of worker nodes"
+  type        = number
+}
+
+variable "disk_size" {
+  description = "EBS disk size for worker nodes (GB)"
+  type        = number
+}
+
 variable "ebs_csi_version" {
-  description = "Version for AWS EBS CSI Driver"
+  description = "Version of the EBS CSI Driver addon"
+  type        = string
+}
+
+###############
+# S3 MODULE
+###############
+variable "bucket_name" {
+  description = "S3 bucket name"
+  type        = string
+}
+
+variable "is_public" {
+  description = "Make S3 bucket public? true/false"
+  type        = bool
+}
+
+variable "environment" {
+  description = "Environment name (dev/prod)"
   type        = string
 }

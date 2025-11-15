@@ -1,3 +1,6 @@
+############################################################
+# CREATE S3 BUCKET
+############################################################
 resource "aws_s3_bucket" "my_bucket" {
   bucket = var.bucket_name
 
@@ -7,7 +10,9 @@ resource "aws_s3_bucket" "my_bucket" {
   }
 }
 
-# Allow controlling S3 public access settings for this specific bucket
+############################################################
+# PUBLIC ACCESS BLOCK (Always created)
+############################################################
 resource "aws_s3_bucket_public_access_block" "public_access" {
   bucket                  = aws_s3_bucket.my_bucket.id
   block_public_acls       = false
@@ -16,7 +21,9 @@ resource "aws_s3_bucket_public_access_block" "public_access" {
   restrict_public_buckets = false
 }
 
-# Attach a public-read bucket policy only when is_public = true
+############################################################
+# PUBLIC READ POLICY  (only if is_public = true)
+############################################################
 resource "aws_s3_bucket_policy" "public_policy" {
   count  = var.is_public ? 1 : 0
   bucket = aws_s3_bucket.my_bucket.id

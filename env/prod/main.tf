@@ -1,21 +1,6 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = ">= 5.0"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = ">= 2.12.0"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = ">= 2.27.0"
-    }
-  }
-}
-
-# VPC Module
+#########################################################
+# VPC MODULE
+#########################################################
 module "vpc" {
   source             = "../../modules/vpc"
   aws_region         = var.aws_region
@@ -26,23 +11,45 @@ module "vpc" {
   cluster_name       = var.cluster_name
 }
 
-# EKS Module
+#########################################################
+# EKS MODULE
+#########################################################
 module "eks" {
   source             = "../../modules/eks"
+
   cluster_name       = var.cluster_name
+  aws_region         = var.aws_region
   eks_version        = var.eks_version
+
   desired_capacity   = var.desired_capacity
   min_capacity       = var.min_capacity
   max_capacity       = var.max_capacity
+
   instance_type      = var.instance_type
   private_subnet_ids = module.vpc.private_subnet_ids
-  aws_region         = var.aws_region
+
   ebs_csi_version    = var.ebs_csi_version
+  disk_size          = var.disk_size
 }
 
-#######################################
-# Metrics Server
-#######################################
+#########################################################
+# WAIT FOR EKS API SERVER (IMPORTANT)
+#########################################################
+resource "null_resource" "wait_for_eks" {
+  depends_on = [module.eks]
+
+  provisioner "local-exec" {
+    command = <<EOF
+echo "Waiting 120 seconds for EKS API endpoint to stabilize..."
+sleep 120
+EOF
+  }
+}
+
+
+#########################################################
+# METRICS SERVER
+#########################################################
 resource "helm_release" "metrics_server" {
   provider         = helm.eks
   name             = "metrics-server"
@@ -54,19 +61,20 @@ resource "helm_release" "metrics_server" {
   wait             = true
   timeout          = 300
 
-  set = [
-    {
-      name  = "args"
-      value = "{--kubelet-insecure-tls,--kubelet-preferred-address-types=InternalIP}"
-    }
-  ]
+  set = [{
+    name  = "args"
+    value = "{--kubelet-insecure-tls,--kubelet-preferred-address-types=InternalIP}"
+  }]
 
-  depends_on = [module.eks]
+   depends_on = [
+    module.eks,
+    null_resource.wait_for_eks
+  ]
 }
 
-#######################################
-# AWS Load Balancer Controller
-#######################################
+#########################################################
+# AWS LOAD BALANCER CONTROLLER
+#########################################################
 resource "helm_release" "aws_load_balancer_controller" {
   provider         = helm.eks
   name             = "aws-load-balancer-controller"
@@ -77,42 +85,24 @@ resource "helm_release" "aws_load_balancer_controller" {
   create_namespace = false
 
   set = [
-    {
-      name  = "clusterName"
-      value = module.eks.cluster_name
-    },
-    {
-      name  = "region"
-      value = var.aws_region
-    },
-    {
-      name  = "vpcId"
-      value = module.vpc.vpc_id
-    },
-
+    { name = "clusterName", value = module.eks.cluster_name },
+    { name = "region",      value = var.aws_region },
+    { name = "vpcId",       value = module.vpc.vpc_id },
     {
       name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-      value =  module.eks.alb_irsa_role_arn
-    },
-
+      value = module.eks.alb_irsa_role_arn
+    }
   ]
 
-  depends_on = [module.eks]
+   depends_on = [
+    module.eks,
+    null_resource.wait_for_eks
+  ]
 }
 
-#######################################
-# S3 Module
-#######################################
-module "s3" {
-  source      = "../../modules/s3"
-  bucket_name = var.bucket_name
-  is_public   = var.is_public
-  environment = var.environment
-}
-
-#######################################
-# Prometheus Stack
-#######################################
+#########################################################
+# PROMETHEUS STACK
+#########################################################
 resource "helm_release" "kube_prometheus_stack" {
   provider         = helm.eks
   name             = "kube-prometheus-stack"
@@ -125,6 +115,20 @@ resource "helm_release" "kube_prometheus_stack" {
   values = [
     file("${path.module}/prometheus-values.yaml")
   ]
+  depends_on = [
+    module.eks,
+    null_resource.wait_for_eks,
+    helm_release.aws_load_balancer_controller
+  ]
 
-  depends_on = [module.eks]
+}
+
+#########################################################
+# S3 MODULE
+#########################################################
+module "s3" {
+  source      = "../../modules/s3"
+  bucket_name = var.bucket_name
+  is_public   = var.is_public
+  environment = var.environment
 }
